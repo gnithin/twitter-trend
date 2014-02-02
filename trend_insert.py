@@ -4,6 +4,7 @@ import urllib
 import httplib
 import base64
 import json
+import ast
 import pprint as pp
 from pymongo import MongoClient
 from bson.objectid import ObjectId as objid
@@ -81,7 +82,11 @@ if __name__ == "__main__":
         conn.request("POST","/oauth2/token/",param,headers)
         response=conn.getresponse()
         payload = response.read()
-        access_token=payload[payload.find("n\":\"")+4:payload.find("token_type")-3]
+
+        ##Converting the payload string to a dictionary
+        dic = ast.literal_eval(payload)
+        access_token = dic.get("access_token")
+
         get_headers={"Authorization":"Bearer "+access_token}
         
         ##Getting WorldWide Trends 
