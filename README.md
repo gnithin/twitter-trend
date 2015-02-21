@@ -12,3 +12,4 @@
 ## TODO
 * Adding more wrapper for different use-cases.
 * Adding wrappers to fetch stale data from db.
+* Making a python module out of this.
