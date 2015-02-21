@@ -1,0 +1,9 @@
+*~
+~*
+.*
+!.gitignore
+#*#
+*#
+#*
+constants.py
+*.pyc
