@@ -171,7 +171,7 @@ if __name__ == "__main__":
     # use authenticate to get the token
     token = authenticate()
     # create a twitter obj with screen_name
-    tc = twitter("symantec")
+    tc = twitter("abshk11")
     tc._set_conn()
     # Use the auth token and no of counts of tweets
     # for the screen_name(symantec)

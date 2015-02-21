@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+
 """
 Takes 100 tweets and puts it in the database
 """
-# Copyright (C) 2013  Abhishek Bhattacharjee <abhishek.bhattacharjee11@gmail.com>
+
+# Copyright (C) 2015  Abhishek Bhattacharjee <abhishek.bhattacharjee11@gmail.com>
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,11 +27,9 @@ import httplib
 import base64
 import json
 import ast
-import pprint as pp
+
 from pymongo import MongoClient
-from bson.objectid import ObjectId as objid
-import pdb
-import contants
+from twitter import constants
 
 def put_into_database(trendname,screename,text,loc=None):
     try:
@@ -62,36 +62,37 @@ def get_info_for_trends(x,count=None):
     tweets = tweets_resp.read()
     tweets_json = json.loads(str(tweets))
     i=1
-    #print pp.pprint(tweets_json)
+
     for s in tweets_json['statuses']:
-        #printing names of users and tweets for each trending topic
+
+        # printing names of users and tweets for each trending topic
         print str(i)+". " +s['user']['name'].encode('utf-8')
         print s['text'].encode('utf-8')
         location = s['user']['location']
         time_zone = s['user']['time_zone']
         place = s['place']
-        #if location:
-        #    put_into_database(x['name'],s['user']['screen_name'],s['text'],location)
+
         if time_zone:
             put_into_database(x['name'],s['user']['screen_name'],s['text'],time_zone)
-        #elif place:
-        #    put_into_database(x['name'],s['user']['screen_name'],s['text'],place)
         else:
             put_into_database(x['name'],s['user']['screen_name'],s['text'])
         i=i+1
 
-CONSUMER_KEY = contants.CONSUMER_KEY
-CONSUMER_SECRET = contants.CONSUMER_SECRET
+CONSUMER_KEY = constants.CONSUMER_KEY
+CONSUMER_SECRET = constants.CONSUMER_SECRET
 
 enc_str= base64.b64encode(CONSUMER_KEY+":"+CONSUMER_SECRET)
 
 
 if __name__ == "__main__":
 
+    print CONSUMER_KEY, CONSUMER_KEY, enc_str
+    exit()
+
     try:
         conn = httplib.HTTPSConnection("api.twitter.com")
 
-        #Acquiring the access token
+        # Acquiring the access token
         param = urllib.urlencode({'grant_type':'client_credentials'})
         headers = {"Authorization":"Basic "+enc_str,
                    "Content-type": "application/x-www-form-urlencoded;charset=UTF-8"}
@@ -101,20 +102,19 @@ if __name__ == "__main__":
         response=conn.getresponse()
         payload = response.read()
 
-        ##Converting the payload string to a dictionary
+        # Converting the payload string to a dictionary
         dic = ast.literal_eval(payload)
         access_token = dic.get("access_token")
 
         get_headers={"Authorization":"Bearer "+access_token}
 
-        ##Getting WorldWide Trends
+        # Getting WorldWide Trends
         conn.request("GET","/1.1/trends/place.json?id=1","",get_headers)
         get_resp = conn.getresponse()
         sample = get_resp.read()
 
-        ##converting the received string in JSON form
+        # converting the received string in JSON form
         data = json.loads(str(sample))
-        #print pp.pprint(data[0])
         names = data[0]['trends']
 
         print "-----------------------------Trends-----------------------------------"
