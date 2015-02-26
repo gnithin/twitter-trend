@@ -1,163 +1,100 @@
 #!/usr/bin/env python
 import base64
 import json
-import ast
 import pprint
 import constants
-
-#Imports that will fail in 3+
-try:
-    import httplib
-except ImportError:
-    import http.client as httplib
-
+import twitter_constants as t_const
 import urllib
+from req import https_req
 
-### UTILS ###
+def log(s):
+    """
+    Used to print to screen.
+    Can be controlled to be turned off as well.
+    """
+    print(s)
 
-class https_req:
-    def __init__(self, domain):
-        """
-        TODO:
-        Need to make this work for Python 3+
-        """
-        try:
-            self._conn = httplib.HTTPSConnection(domain)
-        except:
-            self._conn = None
-    
-    def _get_conn(self):
-        """
-        Returns connection object.
-        """
-        return self._conn
-
-    def _make_req(self, uri, request_method, params, headers):
-        """
-        Performs request and returns payload.
-        Returns None if unsuccessful.
-        Note: This does not close the connection upon exit.
-        TODO:
-        Need to make this work for Python 3+
-        """
-        try:
-            self._conn.request(request_method, uri, params, headers)
-            response=self._conn.getresponse()
-        except:
-            print "Error while performing https request."
-            return None
+class twrapper:
+    def __init__(self, key, secret, screen_name):
+        self.__key = key
+        self.__secret = secret
+        self.__https_obj = https_req(t_const.DOMAIN_NAME)
+        self.screen_name = screen_name
+        token = self.__authenticate()
+        #raise Invalid creds exception here.
+        if token == None:
+            raise Exception("Cannot authenticate key and secret!")
         else:
-            payload = response.read()
-            return payload
+            self.__token = token
 
-    def _close_conn(self):
+    def set_screen_name(self, screen_name):
+        self.screen_name = screen_name
+
+    def get_screen_name(self):
+        return self.screen_name
+        
+    def __authenticate(self):
+        '''
+        Used to auntheticate. Consumer key and secret are
+        pre-defined. Returns the header if succesful else
+        exits.
+        '''
+        #Acquiring the access token
+        request_method = "POST"
+        uri = t_const.URI_ACCESS_TOKEN
+        param = urllib.urlencode({'grant_type':'client_credentials'})
+
+        CONSUMER_KEY = self.__key
+        CONSUMER_SECRET = self.__secret
+        
+        enc_str= base64.b64encode(CONSUMER_KEY+":"+CONSUMER_SECRET)
+        headers = {"Authorization":"Basic "+enc_str,
+                   "Content-type": "application/x-www-form-urlencoded;charset=UTF-8"}
+        
+        payload = self.__https_obj._make_req(uri, request_method, param, headers)
+        if payload == None:
+            log("Authentication Failed.")
+            return None
+        
+        #Response type is always json
+        #ref - https://dev.twitter.com/oauth/reference/post/oauth2/token
+        try:
+            dic = json.loads(payload)
+        except ValueError:
+            log("Authentication response Invalid.")
+            return None
+        if "errors" in dic or "access_token" not in dic:
+            log("Error in authentication")
+            return None
+        
+        access_token = dic.get("access_token")
+        get_headers={"Authorization":"Bearer "+access_token}
+        return get_headers
+
+    def __get_tweets_from_json(self, json_data):
         """
-        Closes connection.
+        Takes a list
+        and returns a list of tweet objects
         """
-        if self._conn != None:
-            self._conn.close()
+        tweets = list()
+        list_of_tweets = json.loads(json_data)
+        for t in list_of_tweets:
+            tweets.append(tweet(t))
+        return tweets
 
-def make_https_req(domain, uri, request_method, params, headers):
-    """
-    Performs https requests on the given params.
-    Returns payload if success, None if request failed.
-    """
-    
-    conn = get_https_conn(domain)
-    if conn == None:
-        return None
-    payload = make_https_req(conn, uri, request_method, params, headers)
-    conn.close()
-    return payload
+    def get_tweets(self, tweet_count):
+        api_url = t_const.API_GET_TWEETS + "?screen_name=%s&count=%s"
+        json_tweets = self.__https_obj._make_req(api_url % (self.screen_name, tweet_count),"GET", "", self.__token)
+        if json_tweets == None:
+            log("Error in receiving data")
+            return None
+        tweets = self.__get_tweets_from_json(json_tweets)
+        return tweets
 
-def authenticate():
-    '''
-    Used to auntheticate. Consumer key and secret are
-    pre-defined. Returns the header if succesful else
-    exits.
-    '''    
-    #Acquiring the access token
-    domain_name = "api.twitter.com"
-    request_method = "POST"
-    uri = "/oauth2/token/"    
-    param = urllib.urlencode({'grant_type':'client_credentials'})
-    
-    CONSUMER_KEY=constants.CONSUMER_KEY
-    CONSUMER_SECRET=constants.CONSUMER_SECRET
-    enc_str= base64.b64encode(CONSUMER_KEY+":"+CONSUMER_SECRET)
-    headers = {"Authorization":"Basic "+enc_str,
-               "Content-type": "application/x-www-form-urlencoded;charset=UTF-8"}
-    
-    https_obj = https_req(domain_name)
-    payload = https_obj._make_req(uri, request_method, param, headers)
-    
-    if payload == None:
-        print "Authentication Failed."
-        return None
-    
-    ## Converting the payload string to a dictionary
-    #dic = ast.literal_eval(payload)
-    #Response type is always json
-    #ref - https://dev.twitter.com/oauth/reference/post/oauth2/token
-    try:
-        dic = json.loads(payload)
-    except ValueError:
-        print "Authentication response Invalid."
-        return None
-    
-    access_token = dic.get("access_token")
-    get_headers={"Authorization":"Bearer "+access_token}
-    return get_headers
-
-
-def get_tweets_from_json(json_data):
-    """
-    Takes a list
-    and returns a list of tweet objects
-    """
-    tweets = list()
-    list_of_tweets = json.loads(json_data)
-
-    for t in list_of_tweets:
-        tweets.append(tweet(t))
-
-    return tweets
-
-##################################### END UTILS ########################################
-
-
-class twitter():
-
-    def __init__(self, screename, conn=None):
-        """
-        Expects the screen_name for which, the tweets will
-        be fetched.
-        """
-        self._screename = screename
-        self._conn = conn
-
-    def _set_conn(self):
-        """
-        Sets the HTTP Connection with twitter api end point.
-        Close the connection, when usage is done
-        """
-        self._conn = https_req("api.twitter.com")
-        return self._conn
-
-    def _close_conn():
-        if conn:
-            self._conn.close()
-
-    def _fetch_tweets(self,authentication_token, counts):
-        """
-        Fetches <count> no. of tweets.
-        Loads it into json and returns the json object.
-        """
-        api_url = "/1.1/statuses/user_timeline.json?screen_name=%s&count=%s"
-        data_received = self._conn._make_req(api_url % (self._screename, counts),"GET", "", authentication_token)
-        if data_received == None:
-            print "Error in receiving data"
-        return data_received
+    def __del__(self):
+        #Closing the connection.
+        self.__https_obj.close()
+        
 
 # add all the attributes as properties
 # will make it more efficient
@@ -221,17 +158,35 @@ class tweet():
         """
         Print the properties(not yet props)
         """
-        print "Screen Name: " + self._get_screen_name()
-        print "Tweet: " + self._get_tweet()
-        print "Retweets: " + str(self._get_retweets())
-        print "URLs: " + ", ".join(self._get_urls())
+        log("Screen Name: " + self._get_screen_name())
+        log("Tweet: " + self._get_tweet())
+        log("Retweets: " + str(self._get_retweets()))
+        log("URLs: " + ", ".join(self._get_urls()))
 
 # Test
 if __name__ == "__main__":
+    screen_name = "abshk11"
+    #Testing with bad secret
+    #twrapper_obj = twrapper(constants.CONSUMER_KEY, "asa", screen_name)
+    #Ideally needs to be used with try catch block.
+    twrapper_obj = twrapper(constants.CONSUMER_KEY, constants.CONSUMER_SECRET, screen_name)
+
+    tweets = twrapper_obj.get_tweets(3)
+    for t in tweets:
+        t._print_details()
+        log("----------------------------------")
+    #Fetching tweets from another user.
+    twrapper_obj.set_screen_name("Persie_Official")
+    tweets = twrapper_obj.get_tweets(5)
+    for t in tweets:
+        t._print_details()
+        log("----------------------------------")
+    
+    '''
     # use authenticate to get the token
     token = authenticate()
+
     # create a twitter obj with screen_name
-    
     tc = twitter("abshk11")
     tc._set_conn()
     # Use the auth token and no of counts of tweets
@@ -239,6 +194,7 @@ if __name__ == "__main__":
     tweets = get_tweets_from_json(tc._fetch_tweets(token, 3))
 
     for t in tweets:
-        t._print_details()
+        print t._print_details()
         print "----------------------------------"
-    
+    '''
+
